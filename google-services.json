@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "639768736688",
+    "project_id": "sarvadhi-community-d6625",
+    "storage_bucket": "sarvadhi-community-d6625.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:639768736688:android:e552fc923c9e496eb09c75",
+        "android_client_info": {
+          "package_name": "com.viralijoshi.sarvadhifrontend"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAMGg-XJovEBhfd9rdaQojvQQtJh3EjVYs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

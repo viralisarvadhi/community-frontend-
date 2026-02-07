@@ -4,6 +4,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useAppDispatch, useAppSelector } from "../../../src/store/hooks";
 import {
     fetchMessages,
+    fetchDirectMessages,
     addMessage
 } from "../../../src/store/messages/messages.slice";
 import { messageService } from "../../../src/services/message.service";
@@ -16,9 +17,9 @@ const styles = StyleSheet.create({
         backgroundColor: colors.background,
     },
     messagesContainer: {
-        flex: 1,
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.md,
+        paddingBottom: spacing.lg,
     },
     messageItem: {
         marginVertical: spacing.xs,
@@ -105,7 +106,8 @@ export default function Chat() {
     const isDirectMessage = params.id?.toString().includes("user");
 
     const dispatch = useAppDispatch();
-    const messages = useAppSelector((s) => s.messages.list);
+    const messages = useAppSelector((s) => s.messages?.list || []);
+    const currentUser = useAppSelector((s) => s.auth.user);
     const [text, setText] = useState("");
     const [socket, setSocket] = useState<any>(null);
 
@@ -114,7 +116,7 @@ export default function Chat() {
 
         // Fetch appropriate messages
         if (isDirectMessage) {
-            dispatch(fetchMessages(`user_${id}`));
+            dispatch(fetchDirectMessages(id));
         } else {
             dispatch(fetchMessages(id));
         }
@@ -130,12 +132,22 @@ export default function Chat() {
             localSocket = s;
 
             if (isDirectMessage) {
+                console.log("✅ Socket: joining direct room with userId:", id);
                 s.emit("join:direct", { userId: id });
             } else {
+                console.log("✅ Socket: joining channel room with channelId:", id);
                 s.emit("join:channel", { channelId: id });
             }
 
-            s.on("message:new", (msg) => dispatch(addMessage(msg)));
+            s.on("message:new", (msg) => {
+                console.log("📩 RECEIVED message:new:", msg);
+                dispatch(addMessage(msg));
+            });
+
+            s.on("connect", () => console.log("✅ Socket connected"));
+            s.on("disconnect", () => console.log("❌ Socket disconnected"));
+            s.on("error", (error) => console.log("❌ Socket error:", error));
+
             setSocket(s);
         });
 
@@ -153,20 +165,28 @@ export default function Chat() {
         try {
             let res;
             if (isDirectMessage) {
+                console.log("📤 Sending direct message");
                 res = await messageService.sendDirectMessage(id, text.trim());
-                if (socket) {
-                    socket.emit("message:send-direct", { userId: id, message: res.data });
-                }
             } else {
+                console.log("📤 Sending channel message");
                 res = await messageService.sendChannelMessage(id, text.trim());
-                if (socket) {
+            }
+
+            console.log("✅ Message sent:", res.data);
+            dispatch(addMessage(res.data));
+
+            if (socket) {
+                console.log("📡 Emitting message via socket");
+                if (isDirectMessage) {
+                    socket.emit("message:send-direct", { userId: id, message: res.data });
+                } else {
                     socket.emit("message:send", { channelId: id, message: res.data });
                 }
             }
-            dispatch(addMessage(res.data));
+
             setText("");
         } catch (err) {
-            console.error("Failed to send message:", err);
+            console.error("❌ Failed to send message:", err);
         }
     };
 
@@ -174,14 +194,19 @@ export default function Chat() {
         <View style={styles.container}>
             <FlatList
                 data={messages}
-                keyExtractor={(i) => i.id}
-                renderItem={({ item }) => (
-                    <View style={styles.messageItem}>
-                        <View style={styles.messageOther}>
-                            <Text style={styles.messageTextOther}>{item.content}</Text>
+                keyExtractor={(i) => String(i.id)}
+                renderItem={({ item }) => {
+                    const isOwn = currentUser?.id === item.senderId;
+                    return (
+                        <View style={styles.messageItem}>
+                            <View style={isOwn ? styles.messageOwn : styles.messageOther}>
+                                <Text style={isOwn ? styles.messageTextOwn : styles.messageTextOther}>
+                                    {item.content}
+                                </Text>
+                            </View>
                         </View>
-                    </View>
-                )}
+                    );
+                }}
                 contentContainerStyle={styles.messagesContainer}
                 ListEmptyComponent={
                     <View style={styles.emptyContainer}>
@@ -189,6 +214,8 @@ export default function Chat() {
                     </View>
                 }
                 inverted
+                nestedScrollEnabled={false}
+                scrollEnabled={true}
             />
             <View style={styles.inputContainer}>
                 <TextInput

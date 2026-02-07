@@ -17,9 +17,9 @@ const styles = StyleSheet.create({
         backgroundColor: colors.background,
     },
     messagesContainer: {
-        flex: 1,
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.md,
+        paddingBottom: spacing.lg,
     },
     messageItem: {
         marginVertical: spacing.xs,
@@ -151,7 +151,7 @@ export default function DirectChat() {
     const userId = Array.isArray(id) ? id[0] : id;
 
     const dispatch = useAppDispatch();
-    const messages = useAppSelector((s) => s.messages.list);
+    const messages = useAppSelector((s) => s.messages?.list || []);
     const currentUser = useAppSelector((s) => s.auth.user);
     const [text, setText] = useState("");
     const [socket, setSocket] = useState<any>(null);
@@ -248,19 +248,11 @@ export default function DirectChat() {
             try {
                 const response = await userService.getCommunityUsers();
                 const users = response.data || [];
-                console.log("All users:", users);
-                console.log("Looking for userId:", userId, "type:", typeof userId);
-
-                // Try both string and number comparison
                 const user = users.find((u: any) =>
                     u.id === userId || u.id === String(userId) || String(u.id) === String(userId)
                 );
-
-                console.log("Found other user:", user);
                 if (user) {
                     setOtherUser(user);
-                } else {
-                    console.log("User not found with id:", userId);
                 }
             } catch (err) {
                 console.error("Failed to fetch other user:", err);
@@ -280,8 +272,19 @@ export default function DirectChat() {
                 return;
             }
             localSocket = s;
+
+            console.log("✅ Socket connected, joining direct room with userId:", userId);
             s.emit("join:direct", { userId });
-            s.on("message:new", (msg) => dispatch(addMessage(msg)));
+
+            s.on("message:new", (msg) => {
+                console.log("📩 RECEIVED message:new:", msg);
+                dispatch(addMessage(msg));
+            });
+
+            s.on("connect", () => console.log("✅ Socket connected"));
+            s.on("disconnect", () => console.log("❌ Socket disconnected"));
+            s.on("error", (error) => console.log("❌ Socket error:", error));
+
             setSocket(s);
         });
 
@@ -300,24 +303,23 @@ export default function DirectChat() {
         }
 
         try {
-            console.log("Sending direct message to userId:", userId, "content:", text);
+            console.log("📤 Sending direct message to userId:", userId, "content:", text);
             const res = await messageService.sendDirectMessage(userId, text.trim());
-            console.log("Message sent successfully:", res.data);
+            console.log("✅ Message sent successfully:", res.data);
 
-            // Store the sender ID from the response to identify our messages
-            if (res.data.senderId && !myUserId) {
-                setMyUserId(res.data.senderId);
-            }
-
+            // Add message to Redux immediately
             dispatch(addMessage(res.data));
+
+            // Broadcast via socket
             if (socket) {
+                console.log("📡 Emitting message via socket");
                 socket.emit("message:send-direct", { userId, message: res.data });
             }
+
             setText("");
         } catch (err: any) {
-            console.log("Error sending message:", err?.response?.data || err?.message);
-            const message = err?.response?.data?.message || err?.message || "Failed to send message";
-            Alert.alert("Error", message);
+            console.error("❌ Error sending message:", err?.response?.data || err?.message);
+            Alert.alert("Error", err?.response?.data?.message || "Failed to send message");
         }
     };
 
@@ -325,7 +327,7 @@ export default function DirectChat() {
         <View style={styles.container}>
             <FlatList
                 data={messages}
-                keyExtractor={(i) => i.id}
+                keyExtractor={(i) => String(i.id)}
                 renderItem={({ item, index }) => {
                     // Use detected ID
                     const isMine = String(item.senderId) === String(detectedMyId);
@@ -343,7 +345,7 @@ export default function DirectChat() {
                         : (otherUser?.name || otherUser?.email || item.sender?.name || item.sender?.email || "Other");
 
                     const messageDate = getMessageDate(item);
-                    const previousMessage = index > 0 ? messages[index - 1] : null;
+                    const previousMessage = index < messages.length - 1 ? messages[index + 1] : null;
                     const showDateSeparator = shouldShowDateSeparator(item, previousMessage);
 
                     return (
@@ -382,6 +384,9 @@ export default function DirectChat() {
                         <Text style={styles.emptyText}>No messages yet</Text>
                     </View>
                 }
+
+                nestedScrollEnabled={false}
+                scrollEnabled={true}
             />
             <View style={styles.inputContainer}>
                 <TextInput

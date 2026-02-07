@@ -21,6 +21,8 @@
     },
     "android": {
       "package": "com.viralijoshi.sarvadhifrontend",
+      "googleServicesFile": "./google-services.json",
+      "useNextNotificationsApi": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -34,6 +36,12 @@
     "plugins": [
       "expo-router",
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a75df305-dce1-4d9a-a952-afd4cf76baf7"
+      }
+    }
   }
 }
